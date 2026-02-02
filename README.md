@@ -186,4 +186,3 @@ HP Laboratories Technical Report HPL-2002-129.
 ```
 
 # Coverage Report
-<!-- Pytest Coverage Comment:Begin -->
