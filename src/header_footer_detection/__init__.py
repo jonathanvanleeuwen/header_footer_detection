@@ -1,6 +1,6 @@
 """Header and Footer Detection using the HFEPA algorithm."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from header_footer_detection.HFEPA import HFEPA
 
