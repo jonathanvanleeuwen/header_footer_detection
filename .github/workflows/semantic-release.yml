@@ -6,10 +6,10 @@ on:
       - main
     types: [closed]
 
-# Explicit minimal permissions - GITHUB_TOKEN is restricted by default
+# Permissions for GITHUB_TOKEN (used for releases, not pushing)
 permissions:
-  contents: write  # Required for pushing commits and creating releases
-  pull-requests: read  # Required for reading PR information
+  contents: write
+  pull-requests: read
 
 jobs:
   coverage-report:
@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Use GITHUB_TOKEN instead of PAT - combined with branch protection bypass for Actions
+          token: ${{ secrets.RELEASE_TOKEN }}  # PAT for pushing to protected branch
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -49,7 +49,7 @@ jobs:
 
       - name: Update README with coverage badge HTML
         run: |
-          sed -i '/<!-- Pytest Coverage Comment:Begin -->/,/<!-- Pytest Coverage Comment:End -->/c\<!-- Pytest Coverage Comment:Begin -->\n\${{ steps.coverageComment.outputs.coverageHtml }}\n<!-- Pytest Coverage Comment:End -->' ./README.md
+          sed -i '/<!-- Pytest Coverage Comment:Begin -->/,/<!-- Pytest Coverage Comment:End -->/c\<!-- Pytest Coverage Comment:Begin -->\n${{ steps.coverageComment.outputs.coverageHtml }}\n<!-- Pytest Coverage Comment:End -->' ./README.md
 
       - name: Clean up temporary coverage files
         run: rm ./pytest-coverage.txt ./pytest.xml ./coverage.xml
@@ -67,16 +67,13 @@ jobs:
     needs: coverage-report
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write  # Required for trusted publishing
 
     steps:
       - name: Checkout repository with full history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # GITHUB_TOKEN is automatically provided and has bypass rights when configured
+          token: ${{ secrets.RELEASE_TOKEN }}  # PAT for pushing to protected branch
 
       - name: Pull latest changes from main
         run: git pull
@@ -95,21 +92,20 @@ jobs:
           git config --local user.name "github-actions[bot]"
           semantic-release version
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   build-and-publish:
     name: Build Wheel and Publish to GitHub Release
     needs: semantic-release
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout repository with full history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}  # PAT for pushing to protected branch
 
       - name: Pull latest changes (includes new version tag)
         run: git pull origin main
@@ -140,7 +136,6 @@ jobs:
         run: |
           git fetch --tags
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          # Remove 'v' prefix if present to get clean version number
           VERSION_NUM=${LATEST_TAG#v}
           echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "version_num=$VERSION_NUM" >> $GITHUB_OUTPUT
@@ -153,4 +148,4 @@ jobs:
           files: dist/header_footer_detection-${{ steps.get_version.outputs.version_num }}-py3-none-any.whl
           fail_on_unmatched_files: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
