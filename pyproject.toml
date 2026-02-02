@@ -12,7 +12,7 @@ classifiers = [
 ]
 dynamic = ["readme"]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["levenshtein<1"]
 
 [project.optional-dependencies]
 dev = [
@@ -85,8 +85,6 @@ lint.ignore = [
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = [
-    'src/header_footer_detection/__init__.py:__version__',
-]
+version_variables = ['src/header_footer_detection/__init__.py:__version__']
 branch = "main"
 upload_to_repository = false
