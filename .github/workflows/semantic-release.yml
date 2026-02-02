@@ -1,21 +1,28 @@
 name: Release Pipeline - Coverage, Versioning, and Package Distribution
+
 on:
   pull_request:
     branches:
       - main
     types: [closed]
 
+# Explicit minimal permissions - GITHUB_TOKEN is restricted by default
+permissions:
+  contents: write  # Required for pushing commits and creating releases
+  pull-requests: read  # Required for reading PR information
+
 jobs:
   coverage-report:
     name: Generate and Update Coverage Report
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
+    environment: release  # Requires environment approval for extra security
     steps:
       - name: Checkout repository with full history
         uses: actions/checkout@v4
         with:
-          persist-credentials: false
           fetch-depth: 0
+          # Use GITHUB_TOKEN instead of PAT - combined with branch protection bypass for Actions
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -31,7 +38,7 @@ jobs:
 
       - name: Run tests and generate coverage report (all files)
         run: |
-          pytest --junitxml=pytest.xml --cov=src/{{cookiecutter.project_name}} --cov-report=term-missing --cov-report=xml:coverage.xml tests/ | tee pytest-coverage.txt
+          pytest --junitxml=pytest.xml --cov=src/header_footer_detection --cov-report=term-missing --cov-report=xml:coverage.xml tests/ | tee pytest-coverage.txt
 
       - name: Extract coverage data for README badge
         id: coverageComment
@@ -49,45 +56,64 @@ jobs:
         run: rm ./pytest-coverage.txt ./pytest.xml ./coverage.xml
 
       - name: Commit and push updated README with coverage
-        uses: actions-js/push@master
-        with:
-          message: Update coverage on Readme
-          github_token: ${{ secrets.SEM_RELEASE }}
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add README.md
+          git diff --staged --quiet || git commit -m "docs: update coverage report in README [skip ci]"
+          git push
 
   semantic-release:
     name: Create New Version Tag via Semantic Release
     needs: coverage-report
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
+    environment: release
     concurrency: release
+    permissions:
+      contents: write
+      id-token: write  # Required for trusted publishing
 
     steps:
       - name: Checkout repository with full history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.SEM_RELEASE }}
+          # GITHUB_TOKEN is automatically provided and has bypass rights when configured
 
       - name: Pull latest changes from main
         run: git pull
 
-      - name: Analyze commits and create version tag
-        uses: relekang/python-semantic-release@master
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
         with:
-          github_token: ${{ secrets.SEM_RELEASE  }}
+          python-version: "3.12"
+
+      - name: Install python-semantic-release
+        run: pip install python-semantic-release
+
+      - name: Analyze commits and create version tag
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          semantic-release version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-and-publish:
     name: Build Wheel and Publish to GitHub Release
     needs: semantic-release
     if: ${{ github.event.pull_request.merged }}
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository with full history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.SEM_RELEASE }}
 
       - name: Pull latest changes (includes new version tag)
         run: git pull origin main
@@ -110,7 +136,7 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add dist/*.whl
-          git commit -m "chore: update wheel to latest version [skip ci]" || echo "No changes to commit"
+          git diff --staged --quiet || git commit -m "chore: update wheel to latest version [skip ci]"
           git push
 
       - name: Get current version from git tag
@@ -128,7 +154,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          files: dist/{{cookiecutter.project_name}}-${{ steps.get_version.outputs.version_num }}-py3-none-any.whl
+          files: dist/header_footer_detection-${{ steps.get_version.outputs.version_num }}-py3-none-any.whl
           fail_on_unmatched_files: true
         env:
-          GITHUB_TOKEN: ${{ secrets.SEM_RELEASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
