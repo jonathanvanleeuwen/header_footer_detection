@@ -1,0 +1,134 @@
+name: Release Pipeline - Coverage, Versioning, and Package Distribution
+on:
+  pull_request:
+    branches:
+      - main
+    types: [closed]
+
+jobs:
+  coverage-report:
+    name: Generate and Update Coverage Report
+    if: ${{ github.event.pull_request.merged }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies and package
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest pytest-cov
+          pip install -e ".[dev]"
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run tests and generate coverage report (all files)
+        run: |
+          pytest --junitxml=pytest.xml --cov=src/{{cookiecutter.project_name}} --cov-report=term-missing --cov-report=xml:coverage.xml tests/ | tee pytest-coverage.txt
+
+      - name: Extract coverage data for README badge
+        id: coverageComment
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          hide-comment: true
+          pytest-coverage-path: ./pytest-coverage.txt
+          junitxml-path: ./pytest.xml
+
+      - name: Update README with coverage badge HTML
+        run: |
+          sed -i '/<!-- Pytest Coverage Comment:Begin -->/,/<!-- Pytest Coverage Comment:End -->/c\<!-- Pytest Coverage Comment:Begin -->\n\${{ steps.coverageComment.outputs.coverageHtml }}\n<!-- Pytest Coverage Comment:End -->' ./README.md
+
+      - name: Clean up temporary coverage files
+        run: rm ./pytest-coverage.txt ./pytest.xml ./coverage.xml
+
+      - name: Commit and push updated README with coverage
+        uses: actions-js/push@master
+        with:
+          message: Update coverage on Readme
+          github_token: ${{ secrets.SEM_RELEASE }}
+
+  semantic-release:
+    name: Create New Version Tag via Semantic Release
+    needs: coverage-report
+    if: ${{ github.event.pull_request.merged }}
+    runs-on: ubuntu-latest
+    concurrency: release
+
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SEM_RELEASE }}
+
+      - name: Pull latest changes from main
+        run: git pull
+
+      - name: Analyze commits and create version tag
+        uses: relekang/python-semantic-release@master
+        with:
+          github_token: ${{ secrets.SEM_RELEASE  }}
+
+  build-and-publish:
+    name: Build Wheel and Publish to GitHub Release
+    needs: semantic-release
+    if: ${{ github.event.pull_request.merged }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SEM_RELEASE }}
+
+      - name: Pull latest changes (includes new version tag)
+        run: git pull origin main
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build wheel package
+        run: python -m build --wheel
+
+      - name: Commit wheel to dist/ directory and push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add dist/*.whl
+          git commit -m "chore: update wheel to latest version [skip ci]" || echo "No changes to commit"
+          git push
+
+      - name: Get current version from git tag
+        id: get_version
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # Remove 'v' prefix if present to get clean version number
+          VERSION_NUM=${LATEST_TAG#v}
+          echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "version_num=$VERSION_NUM" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG, Version: $VERSION_NUM"
+
+      - name: Upload wheel as GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          files: dist/{{cookiecutter.project_name}}-${{ steps.get_version.outputs.version_num }}-py3-none-any.whl
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.SEM_RELEASE }}
