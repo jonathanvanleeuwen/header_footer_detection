@@ -1,264 +1,189 @@
-# header_footer_detection
-A Python library with modern CI/CD setup.
+# Header Footer Detection
+
+A Python library for detecting and removing headers and footers from multi-page documents using the **HFEPA (Header and Footer Extraction by Page-Association)** algorithm.
+
+Based on the research paper: [Header and Footer Extraction by Page-Association](https://www.hpl.hp.com/techreports/2002/HPL-2002-129.pdf)
 
 ## Features
-* Automated testing on PR using GitHub Actions
-* Pre-commit hooks for code quality (ruff, isort, trailing whitespace, etc.)
-* Semantic release using GitHub Actions
-* Automatic code coverage report in README
-* Automatic wheel build and GitHub Release publishing
-* Modern Python packaging with pyproject.toml
 
-*Notes*
-Workflows trigger when a branch is merged into main!
-To install, please follow all the instructions in this readme.
-The workflows require a PAT set as secret (see further down for instructions)
-See the notes on how to create semantic releases at the bottom of the README.
+- Automatically detect repeating headers and footers across document pages
+- Handle page numbers and other varying content through text normalization
+- Configurable detection thresholds and window sizes
+- Return detailed scoring data or simply clean documents
 
-If you followed all the steps, whenever a PR is merged into `main`, the workflows are triggered and should:
-* Run pre-commit checks (fail fast on code quality issues)
-* Ensure that tests pass (before merge)
-* Create a code coverage report and commit that to the bottom of the README
-* Create a semantic release (if you follow the semantic release pattern) and automatically update the version number of your code
-* Build a wheel and publish it as a GitHub Release asset
+## Installation
 
-
-# Installation
-
-## Option 1: Install from Private GitHub Release (Recommended)
-Since this is a private repository, you need to authenticate with a GitHub Personal Access Token (PAT).
-
-### Configure git credentials (more secure, recommended)
-This method doesn't expose your token in command history:
+### From PyPI (when published)
 
 ```bash
-# Store credentials in git (one-time setup)
-git config --global credential.helper store
-
-# Then install normally - git will prompt for credentials once
-pip install "git+https://github.com/jonathanvanleeuwen/header_footer_detection.git@VERSION"
-# When prompted: username = your GitHub username, password = your PAT
+pip install header-footer-detection
 ```
 
-### Step 1: Create a Personal Access Token (one-time setup)
-
-1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
-2. Click **"Generate new token (classic)"**
-3. Give it a descriptive name (e.g., `header_footer_detection-install`)
-4. Select the **`repo`** scope (required for private repositories)
-5. Click **"Generate token"**
-6. **Copy the token immediately** - you won't be able to see it again!
-
-### Step 2: Install the package
+### From GitHub
 
 ```bash
-# Replace YOUR_TOKEN with your actual token and VERSION with the desired version (e.g., v1.0.0)
-pip install "git+https://YOUR_TOKEN@github.com/jonathanvanleeuwen/header_footer_detection.git@VERSION"
-
-# Install the latest version (main branch):
-pip install "git+https://YOUR_TOKEN@github.com/jonathanvanleeuwen/header_footer_detection.git"
+pip install git+https://github.com/jonathanvanleeuwen/header_footer_detection.git
 ```
 
-### Using uv (faster alternative to pip)
+### From Source
 
 ```bash
-uv pip install "git+https://YOUR_TOKEN@github.com/jonathanvanleeuwen/header_footer_detection.git@v1.0.0"
-```
-
-## Option 2: Install from Wheel File in Repository
-
-The latest wheel files are also committed to the `dist/` directory in the repository. After cloning:
-
-```bash
-# Clone the repository first
-git clone https://github.com/jonathanvanleeuwen/header_footer_detection.git
-
-# Install the wheel file directly
-pip install header_footer_detection/dist/header_footer_detection-1.0.0-py3-none-any.whl
-```
-
-> **Note:** Replace the version number with the actual version in the `dist/` directory.
-
-## Option 3: Install from Source (Clone Repository)
-
-```bash
-# Clone the repository
 git clone https://github.com/jonathanvanleeuwen/header_footer_detection.git
 cd header_footer_detection
-
-# Install using pip
 pip install .
+```
 
-# Or install in editable/development mode with dev dependencies
+## Quick Start
+
+```python
+from header_footer_detection import HFEPA
+
+# Create a detector with default settings
+detector = HFEPA()
+
+# Your document as a list of pages, each page is a list of lines
+document = [
+    ["Company Report", "Introduction content here", "More text", "Page 1"],
+    ["Company Report", "Chapter 2 content here", "Details", "Page 2"],
+    ["Company Report", "Chapter 3 content here", "More details", "Page 3"],
+]
+
+# Remove headers and footers
+clean_doc = detector.remove_headers_footers(document)
+print(clean_doc)
+# Output: [['Introduction content here', 'More text'], ['Chapter 2 content here', 'Details'], ...]
+
+# Or get detailed analysis data
+analysis = detector.get_header_footer_data(document)
+for page in analysis:
+    for line in page:
+        print(f"{line['text']}: {line['line_type']} (header_score={line['header_score']:.2f})")
+```
+
+## API Reference
+
+### HFEPA Class
+
+```python
+HFEPA(
+    window_size: int = 8,
+    header_threshold: float = 8.0,
+    footer_threshold: float | None = None,
+    weights: tuple[float, ...] = (1.0, 0.75, 0.5, 0.5, 0.5),
+)
+```
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `window_size` | `int` | `8` | Number of pages to compare on each side of the current page |
+| `header_threshold` | `float` | `8.0` | Minimum score for a line to be classified as a header |
+| `footer_threshold` | `float` | `None` | Minimum score for footer classification (defaults to `header_threshold`) |
+| `weights` | `tuple[float, ...]` | `(1.0, 0.75, 0.5, 0.5, 0.5)` | Weights for candidate lines (top-to-bottom for headers, reversed for footers) |
+
+#### Score Calculation
+
+The maximum possible score depends on your settings:
+- **Maximum score**: `(2 × window_size × max(weights)) + 1`
+- **Edge pages** (first/last): `window_size × max(weights) + 1`
+
+Example with default settings (`window_size=8`, `weights=(1.0, ...)`):
+- Maximum score for middle pages: `(2 × 8 × 1.0) + 1 = 17`
+- Maximum score for edge pages: `8 × 1.0 + 1 = 9`
+
+### Methods
+
+#### `remove_headers_footers(doc: list[list[str]]) -> list[list[str]]`
+
+Remove detected headers and footers from a document.
+
+**Parameters:**
+- `doc`: Document as a list of pages, where each page is a list of line strings
+
+**Returns:** Document with header/footer lines removed
+
+#### `get_header_footer_data(doc: list[list[str]]) -> list[list[dict]]`
+
+Analyze a document and return detailed classification data.
+
+**Parameters:**
+- `doc`: Document as a list of pages, where each page is a list of line strings
+
+**Returns:** List of pages with line dictionaries containing:
+- `text`: Original line text
+- `line_type`: `'header'`, `'footer'`, or `'body'`
+- `header_score`: HFEPA score for header classification
+- `footer_score`: HFEPA score for footer classification
+- `header_candidate`: Whether the line was evaluated as a potential header
+- `footer_candidate`: Whether the line was evaluated as a potential footer
+
+## Algorithm Overview
+
+The HFEPA algorithm works by:
+
+1. **Candidate Selection**: For each page, the top N non-empty lines are header candidates, and the bottom N non-empty lines are footer candidates (where N = number of weights).
+
+2. **Text Normalization**: Lines are normalized by:
+   - Collapsing multiple whitespace characters
+   - Replacing digits with `@` (so "Page 1" and "Page 2" become "Page @")
+
+3. **Similarity Scoring**: Each candidate is compared against corresponding candidates on adjacent pages within the window using Levenshtein similarity.
+
+4. **Classification**: Lines with scores meeting or exceeding the threshold are classified as headers or footers.
+
+## Configuration Tips
+
+### For short documents (< 20 pages)
+```python
+detector = HFEPA(window_size=3, header_threshold=2.0)
+```
+
+### For documents with prominent headers only
+```python
+detector = HFEPA(weights=(1.0,), header_threshold=5.0)  # Only check first line
+```
+
+### For documents with subtle headers
+```python
+detector = HFEPA(header_threshold=3.0)  # Lower threshold for more sensitive detection
+```
+
+## Development
+
+### Setup
+
+```bash
+git clone https://github.com/jonathanvanleeuwen/header_footer_detection.git
+cd header_footer_detection
 pip install -e ".[dev]"
 ```
 
-## Option 4: Add to requirements.txt or pyproject.toml
-
-**In requirements.txt:**
-
-```txt
-header_footer_detection @ git+https://github.com/jonathanvanleeuwen/header_footer_detection.git@v1.0.0
-```
-
-**In pyproject.toml (for projects using PEP 621):**
-
-```toml
-[project]
-dependencies = [
-    "header_footer_detection @ git+https://github.com/jonathanvanleeuwen/header_footer_detection.git@v1.0.0",
-]
-```
-
-## Building a Wheel File Locally
+### Running Tests
 
 ```bash
-pip install build
-python -m build --wheel
-# The wheel will be created in the dist/ directory
+pytest
 ```
 
+### Running Tests with Coverage
 
-# Development Setup
-
-1. Create new virtual environment
-   ```bash
-   python -m venv .venv
-   ```
-2. Activate the environment and install library with dev dependencies
-   ```bash
-   pip install -e ".[dev]"
-   ```
-3. Install pre-commit hooks
-   ```bash
-   pip install pre-commit
-   pre-commit install
-   ```
-4. Run pre-commit on all files to ensure everything is properly set up
-   ```bash
-   pre-commit run --all-files
-   ```
-5. Check proper install by running tests
-   ```bash
-   pytest
-   ```
-
-
-# GitHub Repository Setup
-
-Complete these steps in order to enable the CI/CD pipeline.
-
-## Step 1: Create the Release Token (PAT)
-
-The workflow needs a Personal Access Token to push to the protected `main` branch.
-
-### Create a Fine-Grained PAT (Recommended - More Secure)
-
-1. Go to [GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/tokens?type=beta)
-2. Click **"Generate new token"**
-3. Configure the token:
-   - **Token name:** `RELEASE_TOKEN_HEADER_FOOTER_DETECTION` (or similar descriptive name)
-   - **Expiration:** Choose an appropriate duration (recommend 90 days, set a reminder to rotate)
-   - **Repository access:** Select "Only select repositories" → choose this repository
-   - **Permissions:**
-     - **Contents:** Read and write (for pushing commits and tags)
-     - **Metadata:** Read-only (automatically selected)
-4. Click **"Generate token"**
-5. **Copy the token immediately** - you won't see it again!
-
-### Alternative: Classic PAT (Simpler but Broader Access)
-
-If fine-grained tokens don't work for your use case:
-
-1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
-2. Click **"Generate new token (classic)"**
-3. Configure:
-   - **Note:** `RELEASE_TOKEN_HEADER_FOOTER_DETECTION`
-   - **Expiration:** Set an appropriate duration
-   - **Scopes:** Select `repo` (full control of private repositories)
-4. Click **"Generate token"** and copy it
-
-## Step 2: Add the Token as a Repository Secret
-
-1. Go to your repository on GitHub
-2. Navigate to **Settings → Secrets and variables → Actions**
-3. Click **"New repository secret"**
-4. Configure:
-   - **Name:** `RELEASE_TOKEN`
-   - **Secret:** Paste your copied PAT
-5. Click **"Add secret"**
-
-## Step 3: Configure Branch Protection with Rulesets
-
-GitHub Rulesets provide modern, flexible branch protection. The PAT allows the workflow to bypass these rules while humans must go through PRs.
-
-1. Go to your repository → **Settings → Rules → Rulesets**
-2. Click **"New ruleset"** → **"New branch ruleset"**
-3. Configure the ruleset:
-   - **Ruleset name:** `Protect main`
-   - **Enforcement status:** Active
-   - **Target branches:** Click "Add target" → "Include by pattern" → enter `main`
-
-4. Enable these rules:
-   - ✅ **Restrict deletions** - Prevent branch deletion
-   - ✅ **Require a pull request before merging**
-     - Required approvals: `1` (or more)
-     - ✅ Dismiss stale pull request approvals when new commits are pushed
-     - ✅ Require conversation resolution before merging
-   - ✅ **Require status checks to pass**
-     - ✅ Require branches to be up to date before merging
-     - Add status checks: `test` (from python-app.yml), `lint` (from python-app.yml)
-   - ✅ **Block force pushes**
-
-5. Click **"Create"**
-
-
-## Security Model
-
-This setup provides security through multiple layers:
-
-| Protection | What it prevents |
-|------------|------------------|
-| **CODEOWNERS** | Requires your approval for any workflow changes |
-| **Required PRs** | No direct pushes to main (humans must use PRs) |
-| **Required reviews** | At least one approval needed for every change |
-| **Status checks** | Tests must pass before merge |
-| **PAT as secret** | Token only accessible to workflows, not forks |
-
-**Why is the PAT safe?**
-- The PAT is stored as a secret, never exposed in logs (GitHub auto-masks it)
-- Forks cannot access repository secrets
-- Any attempt to modify workflows to steal the PAT requires your explicit approval via CODEOWNERS
-- The PAT can only push; it cannot change branch protection rules
-
-
-# Semantic Release
-
-https://python-semantic-release.readthedocs.io/en/latest/
-
-The workflows are triggered when you merge into main!
-
-When committing, use the following format for your commit message:
-
-**Patch release** (1.0.0 → 1.0.1):
-```
-fix: your commit message
+```bash
+pytest --cov=src --cov-report=html
 ```
 
-**Minor release** (1.0.0 → 1.1.0):
-```
-feat: your commit message
-```
+## License
 
-**Major/breaking release** (1.0.0 → 2.0.0):
-```
-feat: your commit message
+MIT License - see [LICENSE](LICENSE) for details.
 
-BREAKING CHANGE: description of breaking change
-```
+## Citation
 
+If you use this library in academic work, please cite the original paper:
+
+```
+Ding, Y., Oxley, G., & Gerber, M. (2002).
+Header and Footer Extraction by Page-Association.
+HP Laboratories Technical Report HPL-2002-129.
+```
 
 # Coverage Report
 <!-- Pytest Coverage Comment:Begin -->
-<a href="https://github.com/jonathanvanleeuwen/header_footer_detection/blob/main/README.md"><img alt="Coverage" src="https://img.shields.io/badge/Coverage-100%25-brightgreen.svg" /></a><details><summary>Coverage Report </summary><table><tr><th>File</th><th>Stmts</th><th>Miss</th><th>Cover</th></tr><tbody><tr><td colspan="4"><b>src/header_footer_detection</b></td></tr><tr><td>&nbsp; &nbsp;<a href="https://github.com/jonathanvanleeuwen/header_footer_detection/blob/main/src/header_footer_detection/__init__.py">__init__.py</a></td><td>1</td><td>0</td><td>100%</td></tr><tr><td>&nbsp; &nbsp;<a href="https://github.com/jonathanvanleeuwen/header_footer_detection/blob/main/src/header_footer_detection/basic_function.py">basic_function.py</a></td><td>4</td><td>0</td><td>100%</td></tr><tr><td><b>TOTAL</b></td><td><b>5</b></td><td><b>0</b></td><td><b>100%</b></td></tr></tbody></table></details>
-<!-- Pytest Coverage Comment:End -->
