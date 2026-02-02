@@ -187,4 +187,5 @@ HP Laboratories Technical Report HPL-2002-129.
 
 # Coverage Report
 <!-- Pytest Coverage Comment:Begin -->
+<a href="https://github.com/jonathanvanleeuwen/header_footer_detection/blob/main/README.md"><img alt="Coverage" src="https://img.shields.io/badge/Coverage-100%25-brightgreen.svg" /></a><details><summary>Coverage Report </summary><table><tr><th>File</th><th>Stmts</th><th>Miss</th><th>Cover</th></tr><tbody><tr><td colspan="4"><b>src/header_footer_detection</b></td></tr><tr><td>&nbsp; &nbsp;<a href="https://github.com/jonathanvanleeuwen/header_footer_detection/blob/main/src/header_footer_detection/HFEPA.py">HFEPA.py</a></td><td>133</td><td>0</td><td>100%</td></tr><tr><td>&nbsp; &nbsp;<a href="https://github.com/jonathanvanleeuwen/header_footer_detection/blob/main/src/header_footer_detection/__init__.py">__init__.py</a></td><td>3</td><td>0</td><td>100%</td></tr><tr><td><b>TOTAL</b></td><td><b>136</b></td><td><b>0</b></td><td><b>100%</b></td></tr></tbody></table></details>
 <!-- Pytest Coverage Comment:End -->
