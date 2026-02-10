@@ -156,19 +156,39 @@ detector = HFEPA(header_threshold=3.0)  # Lower threshold for more sensitive det
 ```bash
 git clone https://github.com/jonathanvanleeuwen/header_footer_detection.git
 cd header_footer_detection
-pip install -e ".[dev]"
+
+# Create virtual environment with uv
+uv venv .venv
+# Activate: Windows: .venv\Scripts\activate | Unix: source .venv/bin/activate
+
+# Install package and dev dependencies
+uv pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+```
+
+### Code Quality
+
+```bash
+# Format code
+ruff format .
+
+# Check for issues
+ruff check .
+
+# Auto-fix issues
+ruff check --fix .
 ```
 
 ### Running Tests
 
 ```bash
+# Run all tests with coverage (reports in reports/htmlcov/)
 pytest
-```
 
-### Running Tests with Coverage
-
-```bash
-pytest --cov=src --cov-report=html
+# Verbose output
+pytest -v
 ```
 
 ## License
