@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.0.5 (2026-02-10)
+
+### Bug Fixes
+
+- Update_instructions
+  ([`5935e4a`](https://github.com/jonathanvanleeuwen/header_footer_detection/commit/5935e4ab4a716cfd25b585fb6be42d29117dc142))
+
+### Chores
+
+- Update wheel to latest version [skip ci]
+  ([`c9d05b7`](https://github.com/jonathanvanleeuwen/header_footer_detection/commit/c9d05b7989683e0c8995e94ba2d71560464d931d))
+
+
 ## v1.0.4 (2026-02-09)
 
 ### Bug Fixes
